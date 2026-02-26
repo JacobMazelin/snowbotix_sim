@@ -2,64 +2,104 @@
 
 Headless ROS 2 Jazzy + Gazebo Sim simulation on AWS with Foxglove Studio integration.
 
-## Quick Start
+## 🎉 Quick Start
 
-1. **On Mac**: Open this folder in VS Code
-2. **Edit code** in `src/` and `launch/` directories
-3. **Push to GitHub** (`Cmd+Shift+P` → "Git: Push")
-4. **Changes automatically deploy** to AWS and appear in Foxglove
+1. **Start the AWS instance** (if stopped):
+   ```bash
+   ./scripts/check_instance.sh
+   # If stopped, start from AWS Console (link in output)
+   ```
 
-## Architecture
+2. **Wait 1-2 minutes** for boot
+
+3. **Setup SSH tunnel** (keep terminal open):
+   ```bash
+   ./scripts/setup_tunnel.sh
+   ```
+
+4. **Open Foxglove** → Add Connection → WebSocket → `ws://localhost:8765`
+
+5. **Edit code in VS Code** → Push to GitHub → See updates in 30-60 seconds!
+
+## 📚 Documentation
+
+- **[WORKFLOW.md](WORKFLOW.md)** - Complete development workflow guide
+- **[INSTANCE_MANAGEMENT.md](INSTANCE_MANAGEMENT.md)** - AWS instance management & cost control
+
+## 🔄 Development Workflow
 
 ```
 Mac (VS Code) → GitHub → GitHub Actions → AWS EC2 → Foxglove
 ```
 
-## Directory Structure
+1. **Edit** files in `src/`, `launch/`, `scripts/`
+2. **Save** (auto-saves after 1 second)
+3. **Commit** (Git panel: `Cmd+Shift+G` → `Cmd+Enter`)
+4. **Push** (`Cmd+Shift+P` → "Git: Push")
+5. **Wait 30-60 seconds** for GitHub Actions to deploy
+6. **See updates** in Foxglove automatically!
+
+## 💰 Cost-Saving Features
+
+✅ **4-Hour Auto-Shutdown**: Instance automatically stops after 4 hours
+✅ **Auto-Restart on Boot**: All services start automatically when instance starts
+✅ **Safe to Stop**: All code in GitHub, nothing lost on shutdown
+
+**Typical cost**: $0.10-0.30 per week (with auto-shutdown)
+
+## 📁 Project Structure
 
 ```
 snowbotix_sim/
-├── src/                    # ROS 2 nodes and code
+├── .github/workflows/       # Auto-deployment to AWS
+├── .vscode/                # VS Code settings (auto-save, etc.)
+├── src/                    # ROS 2 packages (your code here!)
 ├── launch/                 # Launch files
-├── config/                 # Configuration files
 ├── scripts/                # Utility scripts
-├── aws/                    # AWS deployment scripts
-├── .github/workflows/      # GitHub Actions
-└── README.md
+├── aws/                    # AWS deployment & auto-shutdown scripts
+├── config/                 # Configuration files
+├── README.md              # This file
+├── WORKFLOW.md            # Detailed workflow guide
+└── INSTANCE_MANAGEMENT.md # Instance management & cost control
 ```
 
-## Development Workflow
-
-1. Edit files in VS Code
-2. Changes are tracked automatically
-3. Push to GitHub (or VS Code auto-pushes on save)
-4. GitHub Actions deploys to AWS
-5. Simulation restarts with new code
-6. Foxglove updates automatically
-
-## Git Commands
+## 🛠️ Common Commands
 
 ```bash
-# Stage all changes
-git add .
+# From Mac
+./scripts/check_instance.sh      # Check instance status
+./scripts/setup_tunnel.sh        # Start SSH tunnel
+./scripts/quick_push.sh          # Quick commit & push
 
-# Commit with message
-git commit -m "Your commit message"
+# From AWS (SSH in)
+./scripts/healthcheck.sh         # Check simulation status
+./scripts/move_vehicle.sh vehicle_blue 1.0 0.5  # Move robot
+systemctl --user stop auto-shutdown.service  # Cancel 4h shutdown
+sudo shutdown -h now             # Stop instance immediately
 
-# Push to GitHub (triggers deployment)
-git push origin main
+# View logs
+tail -f /tmp/auto_shutdown.log    # Shutdown timer
+tail -f /tmp/simulation.log       # Simulation output
 ```
 
-## VS Code Shortcuts
+## 🎯 Key Features
 
-- `Cmd+Shift+G` - Open Git panel
-- `Cmd+Enter` - Commit
-- `Cmd+Shift+P` → "Git: Push" - Push to GitHub
+- ✅ **Fully Automated**: Git push → AWS deploy → Foxglove update (30-60 sec)
+- ✅ **Headless**: No GUI on AWS, everything in Foxglove
+- ✅ **Cost-Controlled**: 4-hour auto-shutdown prevents runaway costs
+- ✅ **Auto-Recovery**: Services auto-start when instance boots
+- ✅ **GitHub-Native**: All code safe in GitHub, syncs automatically
 
-## Connecting to Foxglove
+## 🚀 Links
 
-Once deployed:
-1. Open Foxglove Studio
-2. Add Connection → WebSocket
-3. URL: `ws://localhost:8765`
-4. Create SSH tunnel first: `ssh -i ~/Downloads/SnowbotixSim.pem -L 8765:localhost:8765 ubuntu@18.223.190.83 -N`
+- **GitHub Repo**: https://github.com/JacobMazelin/snowbotix_sim
+- **GitHub Actions**: https://github.com/JacobMazelin/snowbotix_sim/actions
+- **AWS Console**: https://console.aws.amazon.com/ec2/
+
+## 📞 Need Help?
+
+See the detailed guides:
+- [WORKFLOW.md](WORKFLOW.md) - Development workflow
+- [INSTANCE_MANAGEMENT.md](INSTANCE_MANAGEMENT.md) - Cost control & instance management
+
+Happy coding! 🤖
