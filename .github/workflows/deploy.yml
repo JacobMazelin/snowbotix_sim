@@ -1,0 +1,87 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.AWS_SSH_KEY }}
+          log-public-key: false
+      
+      - name: Add AWS host to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H 18.223.190.83 >> ~/.ssh/known_hosts
+      
+      - name: Deploy to AWS
+        run: |
+          echo "Deploying to AWS EC2..."
+          # Create remote directory if it doesn't exist
+          ssh ubuntu@18.223.190.83 "mkdir -p ~/snowbotix_sim"
+          
+          # Sync files to AWS (excluding .git and other unnecessary files)
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='*.md' \
+            --exclude='.gitignore' \
+            --exclude='.devcontainer' \
+            ./ ubuntu@18.223.190.83:~/snowbotix_sim/
+          
+          echo "Files synced successfully"
+      
+      - name: Restart Simulation
+        run: |
+          echo "Restarting simulation on AWS..."
+          ssh ubuntu@18.223.190.83 << 'EOF'
+            cd ~/snowbotix_sim
+            chmod +x scripts/*.sh
+            
+            # Stop existing simulation
+            pkill -f "gz sim" || true
+            pkill -f "parameter_bridge" || true
+            sleep 2
+            
+            # Pull latest from git if using git on AWS
+            if [ -d .git ]; then
+              git pull origin main || true
+            fi
+            
+            # Source ROS
+            source /opt/ros/jazzy/setup.bash
+            export ROS_DISTRO=jazzy
+            
+            # Start clock bridge in background
+            nohup bash -c 'source /opt/ros/jazzy/setup.bash && ros2 run ros_gz_bridge parameter_bridge /clock' > /tmp/clock_bridge.log 2>&1 &
+            
+            # Start the main simulation
+            nohup ./scripts/run_diff_drive_headless.sh > /tmp/simulation.log 2>&1 &
+            
+            echo "Simulation restarted at $(date)"
+          EOF
+          
+          echo "Deployment complete!"
+      
+      - name: Verify Deployment
+        run: |
+          sleep 5
+          ssh ubuntu@18.223.190.83 << 'EOF'
+            cd ~/snowbotix_sim
+            ./scripts/healthcheck.sh || echo "Healthcheck completed"
+          EOF
+      
+      - name: Notify Success
+        run: |
+          echo "✅ Deployment successful!"
+          echo "Your changes are now live on AWS."
+          echo "Connect Foxglove to ws://localhost:8765 (via SSH tunnel)"
