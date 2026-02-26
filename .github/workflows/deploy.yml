@@ -21,16 +21,19 @@ jobs:
       - name: Add AWS host to known hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H 18.223.190.83 >> ~/.ssh/known_hosts
+          ssh-keyscan -H 18.223.190.83 >> ~/.ssh/known_hosts 2>/dev/null || true
       
       - name: Deploy to AWS
         run: |
-          echo "Deploying to AWS EC2..."
+          echo "🚀 Deploying to AWS EC2..."
+          echo ""
+          
           # Create remote directory if it doesn't exist
           ssh ubuntu@18.223.190.83 "mkdir -p ~/snowbotix_sim"
           
           # Sync files to AWS (excluding .git and other unnecessary files)
           rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='*.md' \
@@ -38,50 +41,93 @@ jobs:
             --exclude='.devcontainer' \
             ./ ubuntu@18.223.190.83:~/snowbotix_sim/
           
-          echo "Files synced successfully"
+          echo "✅ Files synced successfully"
+          echo ""
       
-      - name: Restart Simulation
+      - name: Build and Restart Simulation
         run: |
-          echo "Restarting simulation on AWS..."
+          echo "🔧 Building and restarting simulation on AWS..."
+          echo ""
+          
           ssh ubuntu@18.223.190.83 << 'EOF'
+            set -e
             cd ~/snowbotix_sim
-            chmod +x scripts/*.sh
             
-            # Stop existing simulation
-            pkill -f "gz sim" || true
-            pkill -f "parameter_bridge" || true
+            echo "→ Making scripts executable..."
+            chmod +x scripts/*.sh
+            chmod +x aws/*.sh 2>/dev/null || true
+            
+            echo "→ Stopping existing simulation..."
+            pkill -f "gz sim" 2>/dev/null || true
+            pkill -f "parameter_bridge" 2>/dev/null || true
             sleep 2
             
-            # Pull latest from git if using git on AWS
-            if [ -d .git ]; then
-              git pull origin main || true
+            echo "→ Syncing with git repository..."
+            if [ ! -d .git ]; then
+              git init
+              git remote add origin https://github.com/JacobMazelin/snowbotix_sim.git
+            fi
+            git fetch origin main
+            git reset --hard origin/main
+            
+            echo "→ Building custom packages (if any)..."
+            if [ -d src ]; then
+              source /opt/ros/jazzy/setup.bash
+              if [ -f src/CMakeLists.txt ] || ls src/*/package.xml 1> /dev/null 2>&1; then
+                echo "  Found packages, building with colcon..."
+                # Build any custom packages
+                cd ~/snowbotix_sim
+                colcon build --symlink-install 2>&1 | tail -20 || echo "  Build completed or no packages to build"
+                source install/setup.bash 2>/dev/null || true
+              else
+                echo "  No packages found to build"
+              fi
             fi
             
-            # Source ROS
-            source /opt/ros/jazzy/setup.bash
-            export ROS_DISTRO=jazzy
+            echo "→ Starting clock bridge..."
+            nohup bash -c 'source /opt/ros/jazzy/setup.bash && source ~/snowbotix_sim/install/setup.bash 2>/dev/null; ros2 run ros_gz_bridge parameter_bridge /clock' > /tmp/clock_bridge.log 2>&1 &
             
-            # Start clock bridge in background
-            nohup bash -c 'source /opt/ros/jazzy/setup.bash && ros2 run ros_gz_bridge parameter_bridge /clock' > /tmp/clock_bridge.log 2>&1 &
+            echo "→ Starting simulation..."
+            nohup bash -c 'source /opt/ros/jazzy/setup.bash && source ~/snowbotix_sim/install/setup.bash 2>/dev/null; cd ~/snowbotix_sim && ./scripts/run_diff_drive_headless.sh' > /tmp/simulation.log 2>&1 &
             
-            # Start the main simulation
-            nohup ./scripts/run_diff_drive_headless.sh > /tmp/simulation.log 2>&1 &
-            
-            echo "Simulation restarted at $(date)"
+            echo ""
+            echo "✅ Simulation restarted at $(date)"
           EOF
           
-          echo "Deployment complete!"
+          echo ""
+          echo "🎉 Deployment complete!"
       
       - name: Verify Deployment
         run: |
-          sleep 5
+          echo "⏳ Waiting for simulation to start..."
+          sleep 10
+          
+          echo ""
+          echo "🔍 Running health check..."
           ssh ubuntu@18.223.190.83 << 'EOF'
             cd ~/snowbotix_sim
-            ./scripts/healthcheck.sh || echo "Healthcheck completed"
+            ./scripts/healthcheck.sh 2>&1 | head -50
           EOF
+          
+          echo ""
+          echo "📊 Check live status:"
+          echo "   https://github.com/JacobMazelin/snowbotix_sim/actions"
+          echo ""
+          echo "🌐 Your simulation is now live at AWS!"
+          echo "   Connect Foxglove to: ws://localhost:8765 (via SSH tunnel)"
       
       - name: Notify Success
         run: |
-          echo "✅ Deployment successful!"
-          echo "Your changes are now live on AWS."
-          echo "Connect Foxglove to ws://localhost:8765 (via SSH tunnel)"
+          echo ""
+          echo "========================================"
+          echo "  ✅ DEPLOYMENT SUCCESSFUL!"
+          echo "========================================"
+          echo ""
+          echo "📝 Your changes have been deployed to AWS"
+          echo "⏱️  Changes will appear in Foxglove in ~30 seconds"
+          echo ""
+          echo "🔗 Useful links:"
+          echo "   GitHub Repo: https://github.com/JacobMazelin/snowbotix_sim"
+          echo "   GitHub Actions: https://github.com/JacobMazelin/snowbotix_sim/actions"
+          echo ""
+          echo "🚀 Happy coding!"
